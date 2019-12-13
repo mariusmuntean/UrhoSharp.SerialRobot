@@ -1,0 +1,359 @@
+---
+packages:
+- id: UrhoSharp
+  version: 1.9.67
+uti: com.xamarin.workbook
+id: 4178e0ca-3b2b-4d1e-81f7-420a57f5af17
+title: UrhoWorkbook5
+platforms:
+- MacNet45
+---
+
+```csharp
+#r "UrhoSharp"
+```
+
+```csharp
+using Urho;
+using System.IO;
+using Urho.Gui;
+
+using Urho;
+using Urho.Shapes;
+using Urho.Physics;
+using Urho.Actions;
+using Urho.Urho2D;
+
+	public class SimplerApplication : Application
+	{
+        public Action Go{get; set;}
+
+        [Preserve]
+		public SimplerApplication(ApplicationOptions options) : base(options) {
+            Started += () =>
+            {
+                Go?.Invoke();
+            };
+        }
+
+		public Node CameraNode { get; private set; }
+
+		public Camera Camera { get; private set; }
+
+		public Scene Scene { get; private set; }
+
+		public Octree Octree { get; private set; }
+
+		public Zone Zone { get; private set; }
+
+		public Node RootNode { get; private set; }
+
+		public Node LightNode { get; private set; }
+
+		public Light Light { get; private set; }
+
+		public Viewport Viewport { get; private set; }
+
+		public bool MoveCamera { get; set; } = true;
+
+		public float Yaw { get; set; }
+
+		public float Pitch { get; set; }
+
+		protected override void Start()
+		{
+			// 3D scene with Octree
+			Scene = new Scene(Context);
+			Octree = Scene.CreateComponent<Octree>();
+			Zone = Scene.CreateComponent<Zone>();
+			Zone.AmbientColor = new Color(0.6f, 0.6f, 0.6f);
+			RootNode = Scene.CreateChild("RootNode");
+			RootNode.Position = new Vector3(x: 0, y: -2, z: 8);
+
+			// Camera
+			CameraNode = Scene.CreateChild(name: "Camera");
+			CameraNode.Rotation = new Quaternion(Pitch = 0, 0, 0);
+			Camera = CameraNode.CreateComponent<Camera>();
+
+			// Light
+			LightNode = CameraNode.CreateChild();
+			LightNode.Position = new Vector3(-5, 10, 0);
+			Light = LightNode.CreateComponent<Light>();
+			Light.Range = 100;
+			Light.Brightness = 0.5f;
+			Light.LightType = LightType.Point;
+
+			// Viewport
+			Viewport = new Viewport(Context, Scene, Camera, null);
+			Renderer.SetViewport(0, Viewport);
+			Viewport.SetClearColor(new Color(0.88f, 0.88f, 0.88f));
+
+			if (Platform == Platforms.Android || Platform == Platforms.iOS)
+			{
+				Viewport.RenderPath.Append(CoreAssets.PostProcess.FXAA2);
+			}
+			else if (Platform == Platforms.Windows || Platform == Platforms.MacOSX)
+			{
+				ResourceCache.AutoReloadResources = true;
+				Renderer.HDRRendering = true;
+				Viewport.RenderPath.Append(CoreAssets.PostProcess.BloomHDR);
+				Viewport.RenderPath.Append(CoreAssets.PostProcess.FXAA3);
+			}
+
+#if NET45
+			Input.SubscribeToMouseWheel(args => CameraNode.Translate(-Vector3.UnitZ * 1f * args.Wheel * -1));
+			Input.SetMouseVisible(true, true);
+			Input.SubscribeToKeyDown(args => {
+				if (args.Key == Key.Esc)
+				{
+					Exit();
+				}
+			});
+#endif
+		}
+
+		public float MoveSpeed { get; set; } = 10f;
+
+		protected override void OnUpdate(float timeStep)
+		{
+			if (MoveCamera)
+			{
+				if (Input.GetMouseButtonDown(MouseButton.Left))
+					MoveCameraMouse(timeStep);
+				else
+					MoveCameraTouches(timeStep);
+
+				if (Input.GetKeyDown(Key.W)) CameraNode.Translate(Vector3.UnitZ * MoveSpeed * timeStep);
+				if (Input.GetKeyDown(Key.S)) CameraNode.Translate(-Vector3.UnitZ * MoveSpeed * timeStep);
+				if (Input.GetKeyDown(Key.A)) CameraNode.Translate(-Vector3.UnitX * MoveSpeed * timeStep);
+				if (Input.GetKeyDown(Key.D)) CameraNode.Translate(Vector3.UnitX * MoveSpeed * timeStep);
+			}
+			
+			base.OnUpdate(timeStep);
+		}
+
+		protected void MoveCameraMouse(float timeStep)
+		{
+			const float mouseSensitivity = .05f;
+
+			if (UI.FocusElement != null)
+				return;
+
+			var mouseMove = Input.MouseMove;
+			Yaw += mouseSensitivity * mouseMove.X;
+			Pitch += mouseSensitivity * mouseMove.Y;
+			Pitch = MathHelper.Clamp(Pitch, -90, 90);
+
+			CameraNode.Rotation = new Quaternion(Pitch, Yaw, 0);
+		}
+
+		protected void MoveCameraTouches(float timeStep)
+		{
+			var input = Input;
+			for (uint i = 0, num = input.NumTouches; i < num; ++i)
+			{
+				TouchState state = input.GetTouch(i);
+				if (state.TouchedElement != null)
+					continue;
+
+				if (state.Delta.X != 0 || state.Delta.Y != 0)
+				{
+					var camera = CameraNode.GetComponent<Camera>();
+					if (camera == null)
+						return;
+
+					var graphics = Graphics;
+					Yaw += 2 * camera.Fov / graphics.Height * state.Delta.X;
+					Pitch += 2 * camera.Fov / graphics.Height * state.Delta.Y;
+					CameraNode.Rotation = new Quaternion(Pitch, Yaw, 0);
+				}
+				else
+				{
+					var cursor = UI.Cursor;
+					if (cursor != null && cursor.Visible)
+						cursor.Position = state.Position;
+				}
+			}
+		}
+	}
+
+	public class Bar : Component
+	{
+		Node barNode;
+		Node textNode;
+		Color color;
+		string name;
+
+		public float Value
+		{
+			get { return barNode.Scale.Y; }
+			set { barNode.RunActionsAsync(new EaseBackOut(new ScaleTo(3f, 1, value, 1))); }
+		}
+
+		public Bar(string name, Color color)
+		{
+			this.name = name;
+			this.color = color;
+			ReceiveSceneUpdates = true;
+		}
+
+		public override void OnAttachedToNode(Node node)
+		{
+			barNode = node.CreateChild();
+			barNode.Scale = new Vector3(1, 0, 1);
+			var box = barNode.CreateComponent<Box>();
+			box.Color = color;
+
+			textNode = node.CreateChild();
+			textNode.Position = new Vector3(0, 3, 0);
+			var text3D = textNode.CreateComponent<Text3D>();
+			text3D.SetFont(CoreAssets.Fonts.AnonymousPro, 60);
+			text3D.TextEffect = TextEffect.Stroke;
+			text3D.Text = name;
+
+			base.OnAttachedToNode(node);
+		}
+
+		protected override void OnUpdate(float timeStep)
+		{
+			var pos = barNode.Position;
+			var scale = barNode.Scale;
+			barNode.Position = new Vector3(pos.X, scale.Y / 2f, pos.Z);
+			textNode.Position = new Vector3(-0.5f, scale.Y + 0.5f, 0);
+		}
+	}
+```
+
+```csharp
+var rootFolder = Directory.GetCurrentDirectory();
+var options = new ApplicationOptions()
+            {
+                ResourcePrefixPaths = new[] {rootFolder},
+                ResourcePaths = new[] {"Data"},
+                Width = 1280,
+                Height = 720
+            };
+var app = new SimplerApplication(options);
+var tcs = new TaskCompletionSource<Application>();
+
+app.Go += () => { tcs.SetResult(app); };
+
+Task.Factory.StartNew(() => app.Run(),
+                CancellationToken.None,
+                TaskCreationOptions.DenyChildAttach,
+                SynchronizationContext.Current == null ? TaskScheduler.Default : TaskScheduler.FromCurrentSynchronizationContext());
+await tcs.Task.ConfigureAwait(true);
+```
+
+```csharp
+app.Scene.GetOrCreateComponent<PhysicsWorld>();
+```
+
+```csharp
+app.RootNode.Position = Vector3.Zero;
+```
+
+```csharp
+app.CameraNode.Position = new Vector3(-10, 10, -10);
+app.CameraNode.LookAt(new Vector3(0, 2, -2), Vector3.Up, TransformSpace.World);
+app.Camera.Zoom = 0.5f;
+// The camera mode can change how the scene is displayed...would have expected this in the renderer, but hey...
+//app.Camera.FillMode = FillMode.Wireframe;
+```
+
+```csharp
+app.LightNode.Position = new Vector3(-20, 10, -5);
+app.LightNode.LookAt(Vector3.Zero, Vector3.Up, TransformSpace.World);
+```
+
+```csharp
+app.Engine.SubscribeToPostRenderUpdate(args => {
+    // Default debug rendering.
+    app.Renderer.DrawDebugGeometry(false);
+
+    // Use debug renderer to output physics world debug.
+    var debugRendererComp = app.Scene.GetComponent<DebugRenderer>();
+    var physicsComp = app.Scene.GetComponent<PhysicsWorld>();
+    if(physicsComp != null)
+    {
+        physicsComp.DrawDebugGeometry(debugRendererComp, false);
+    }
+});
+```
+
+```csharp
+var floorNode = app.RootNode.GetChild("Floor", false);
+if(floorNode == null)
+{
+    floorNode = app.RootNode.CreateChild("Floor");
+    floorNode.Position = Vector3.Zero;
+    floorNode.Scale = new Vector3(10, 1, 10);
+    var floorComp = floorNode.CreateComponent<Urho.Shapes.Plane>();
+    floorComp.SetMaterial(Material.FromColor(new Color(0, 0, 1, 0.5f)));
+}
+```
+
+```csharp
+var boxNode = app.RootNode.GetChild("Box", false);
+if(boxNode == null)
+{
+    boxNode = app.RootNode.CreateChild("Box");
+    boxNode.Position = new Vector3(0, 5, 0);
+    boxNode.SetScale(2f);
+    var boxComp = boxNode.CreateComponent<Box>();
+    boxComp.Color = Color.Red;
+    boxComp.SetMaterial(Material.FromColor(Color.Red));
+}
+```
+
+```csharp
+boxNode.Position = new Vector3(0, 10, 0);
+```
+
+```csharp
+// The floor is a static body without mass (no mass means the object will remain where it is and won't be influenced by gravity).
+var rigidBody = floorNode.GetComponent<RigidBody>();
+if(rigidBody == null)
+{
+    rigidBody = floorNode.CreateComponent<RigidBody>();
+    rigidBody.Mass = 0;
+    rigidBody.Restitution = 0.4f;
+    var collNode = floorNode.CreateComponent<CollisionShape>();
+    // A static plane is not limited to the bounds of the node so we use a box instead to allow the red box to fall over the edge.
+    //collNode.SetStaticPlane(Vector3.Zero, Quaternion.Identity);
+    collNode.SetBox(Vector3.One, Vector3.Zero, Quaternion.Identity);
+}
+
+// The cube will drop down onto the floor and bounce.
+rigidBody = boxNode.GetComponent<RigidBody>();
+if(rigidBody == null)
+{
+    rigidBody = boxNode.CreateComponent<RigidBody>();
+    rigidBody.Mass = 1f;
+    rigidBody.Restitution = 1.8f;
+    boxNode.SetScale(3f);
+    var collNode = boxNode.CreateComponent<CollisionShape>();
+    collNode.SetBox(Vector3.One, Vector3.Zero, Quaternion.Identity);
+}
+```
+
+```csharp
+var originalScale = floorNode.Scale;
+boxNode.SubscribeToNodeCollision(args => {
+    args.OtherBody.Node.RemoveAllActions();
+    args.OtherBody.Node.Scale = originalScale;
+    args.OtherBody.Node.RunActionsAsync(new Urho.Actions.ScaleBy(0.1f, 1.2f), new Urho.Actions.ScaleBy(0.1f, 0.8f));
+});
+```
+
+```csharp
+app.Scene.GetComponent<PhysicsWorld>(false).SubscribeToPhysicsPostStep(async args => {
+    if(boxNode.Position.Y < -2)
+    {
+        await boxNode.RunActionsAsync(new Urho.Actions.MoveTo(1f, new Vector3(0, 10, 0)));
+        boxNode.GetComponent<RigidBody>().ResetToDefault();
+        rigidBody.Mass = 1f;
+        rigidBody.Restitution = 1.8f;
+    }
+});
+```
