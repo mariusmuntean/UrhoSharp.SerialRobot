@@ -230,8 +230,8 @@ var options = new ApplicationOptions()
             {
                 ResourcePrefixPaths = new[] {rootFolder},
                 ResourcePaths = new[] {"Data"},
-                Width = 1280,
-                Height = 720
+                Width = 1110,
+                Height = 900
             };
 var app = new SimplerApplication(options);
 var tcs = new TaskCompletionSource<Application>();
