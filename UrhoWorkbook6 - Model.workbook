@@ -265,6 +265,8 @@ Node mainNode = app.Scene.CreateChild("mainNode");
 
 **Robot**
 
+Consists of a bottom plate and a series of joints and links
+
 ```csharp
 mainNode.RemoveChild(mainNode.GetChild("roboNode", false));
 Node roboNode = mainNode.CreateChild("roboNode");
@@ -280,13 +282,20 @@ plateNode.Translate(new Vector3(0.0f, -0.05f, 0.0f));
 planeShape.Color = Color.White;
 ```
 
-Arm Segment 1
-
-An arm segment consists of a joint and a rod
+Joints and links
 
 ```csharp
-roboNode.RemoveChild(roboNode.GetChild("armSegment1Node", false));
-var armSegment1Node = roboNode.CreateChild("armSegment1Node");
+roboNode.RemoveChild(roboNode.GetChild("jointsAndLinksNode", false));
+var jointsAndLinksNode = roboNode.CreateChild("jointsAndLinksNode");
+```
+
+Segment 1
+
+A segment consists of a joint and a link
+
+```csharp
+jointsAndLinksNode.RemoveChild(roboNode.GetChild("armSegment1Node", false));
+var armSegment1Node = jointsAndLinksNode.CreateChild("armSegment1Node");
 ```
 
 ```csharp
@@ -310,7 +319,7 @@ rodShape.Color = Color.Green;
 Arm Segment 2 - a clone
 
 ```csharp
-roboNode.RemoveChild(roboNode.GetChild("armSegment2Node", false)); 
+jointsAndLinksNode.RemoveChild(roboNode.GetChild("armSegment2Node", false)); 
 var armSegment2Node = armSegment1Node.Clone(CreateMode.Local); 
 armSegment2Node.Name = "armSegment2Node"; 
 armSegment2Node.Rotation = Quaternion.FromAxisAngle(Vector3.UnitZ, -90.0f);
@@ -320,7 +329,9 @@ armSegment2Node.Position = new Vector3(0.0f, 1.0f, 0.0f);
 ```csharp
 app.Input.KeyDown += (e) => {
     if(e.Key == Key.R){
-        roboNode.Rotate(Quaternion.FromAxisAngle(Vector3.UnitY, 10.0f));
+        jointsAndLinksNode.Rotate(Quaternion.FromAxisAngle(Vector3.UnitY, 10.0f));
+    } else if(e.Key == Key.T){
+        jointsAndLinksNode.Rotate(Quaternion.FromAxisAngle(Vector3.UnitY, -10.0f));
     }
-}; 
+};
 ```
